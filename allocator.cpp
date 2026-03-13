@@ -5,7 +5,6 @@
 #include <stdio.h>
 #include <atomic>
 #include <stdlib.h>
-// set environment LD_PRELOAD /home/khang/sys_programming/task5-memory-tuankhang2003/libmymalloc.so
 /*----------------------------*/
 
 /* >= 128KB -> use mmap */
