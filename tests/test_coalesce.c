@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <time.h>
-#include <unistd.h>   // getopt
+#include <unistd.h>
 
 #define OPS_PER_THREAD 10000      
 #define ALLOC_SIZE 64
@@ -20,19 +20,16 @@ void* worker(void* arg)
     void* ptrs[t->ops];
 
     // Phase 1: allocate blocks
-    fprintf(stderr, "start\n");
     for(int i = 0; i < t->ops; i++) 
     {
         size_t size = ALLOC_SIZE;
         ptrs[i] = malloc(size);
         if(!ptrs[i]) exit(1);
     }
-    fprintf(stderr, "phase 1\n");
 
     // Phase 2: free every other block to create fragmentation
     for(int i = 0; i < t->ops; i += 2)
         free(ptrs[i]);
-    fprintf(stderr,"phase 2\n");
 
 
     // Phase 3: allocate new blocks to test coalescing/reuse
