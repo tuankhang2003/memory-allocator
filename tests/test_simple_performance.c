@@ -6,6 +6,8 @@
 #include <time.h>
 #include <getopt.h>
 
+/** Test allocation and free with fixed size */
+
 
 #define OPS_PER_THREAD 10000
 #define ALLOC_SIZE 64
