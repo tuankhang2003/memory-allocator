@@ -79,7 +79,7 @@ make check
 ```
 
 The benchmark performs repeated allocation and deallocation operations and compares the performance of the custom allocator with the default glibc `malloc()`.
-You can choose whether to generate plot images by setting plot = True in **[test_performance.py](./tests/test_performance.py)** . 
+You can choose whether to generate plot images by setting plot_img = True in **[test_performance.py](./tests/test_performance.py)** . 
 
 Example output:
 
@@ -96,7 +96,7 @@ Example output:
 4 threads: 0.001540 s
 ```
 
-When plot = True, the benchmark script also generates image files (e.g., **[simple_allocation_plot.png](./images/simple_allocation_plot.png)**) under the images/ directory. You can view these images to visually compare performance trends.
+When plot_img = True, the benchmark script also generates image files (e.g., **[simple_allocation_plot.png](./images/simple_allocation_plot.png)**) under the images/ directory. You can view these images to visually compare performance trends.
 
 
 ---
