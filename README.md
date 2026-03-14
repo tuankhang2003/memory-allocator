@@ -80,22 +80,31 @@ make check
 ```
 
 The benchmark performs repeated allocation and deallocation operations and compares the performance of the custom allocator with the default glibc `malloc()`.
+You can choose whether to generate plot images by setting plot = True in **[test_performance.py](./tests/test_performance.py)** . 
 
 Example output:
 
 ```
-Running allocation benchmark...
++++++ Benchmark for simple allocation test ++++++
+=== Custom malloc ===
+1 threads: 0.179591 s
+2 threads: 0.178883 s
+4 threads: 0.180692 s
 
-Custom allocator: 10.4M ops/s
-glibc malloc(): 8.9M ops/s
+=== glibc malloc ===
+1 threads: 0.000789 s
+2 threads: 0.000868 s
+4 threads: 0.001540 s
 ```
+
+When plot = True, the benchmark script also generates image files (e.g., **[simple_allocation_plot.png](./images/simple_allocation_plot.png)**) under the images/ directory. You can view these images to visually compare performance trends.
+
 
 ---
 ## Benchmark Metrics
 The Benchmark measures:
-- Operations per second
-- Total execution time
-- Scalability across threads
+- Total execution time for each test
+- Scalability across threads (1, 2 and 4 threads)
 
 The results are summarized in **[DESIGN_AND_BENCHMARK.md](DESIGN_AND_BENCHMARK.md)**.
 

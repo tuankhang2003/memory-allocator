@@ -161,8 +161,81 @@ advanced features found in production allocators such as:
 ---
 
 
-# 3 Benchmark
+# 3 Benchmark Results – Custom Allocator vs glibc malloc
 
+This benchmark compares the execution time of the custom memory allocator (thread‑local arenas) with the standard glibc `malloc` implementation on three tests:
+
+- **Simple allocation**
+- **Coalesce (allocate/free)**
+- **Random allocation**
+
+Each test is run with **1, 2, and 4 threads**. Each thread performs **10,000 allocations** (`OPS_PER_THREAD = 10000`) of fixed size (64 bytes).
+
+---
+
+## Test 1 – Simple Allocation
+
+| Threads | Custom malloc (s) | glibc malloc (s) |
+|---------|------------------:|-----------------:|
+| 1       | 0.177249          | 0.000794         |
+| 2       | 0.180249          | 0.000815         |
+| 4       | 0.181784          | 0.001153         |
+
+**Observations:**  
+- The custom allocator takes ~0.18 s regardless of thread count, indicating little contention or overhead increase with thread count.  
+- glibc `malloc` is orders of magnitude faster for this microbenchmark.
+
+---
+
+## Test 2 – Coalesce Test
+
+| Threads | Custom malloc (s) | glibc malloc (s) |
+|---------|------------------:|-----------------:|
+| 1       | 0.279015          | 0.000929         |
+| 2       | 0.287218          | 0.001071         |
+| 4       | 0.274107          | 0.001373         |
+
+**Observations:**  
+- Custom allocator times are slightly higher than in the Simple test, likely due to the additional block merging logic.  
+- glibc remains extremely fast by comparison.
+
+---
+
+## Benchmark Plots
+
+### Simple Allocation Test
+![Simple allocation benchmark](images/simple_allocation_plot.png)
+
+### Coalesce Test
+![Coalesce benchmark](images/coalesce_plot.png)
+
+---
+
+## General Interpretation
+
+- The custom allocator shows **reasonably consistent execution time across thread counts**, demonstrating basic scalability with thread‑local arenas.  
+- glibc `malloc` is significantly faster on all tests — typical for production allocators that employ complex heuristics and optimizations. 
+
+---
+
+## Discussion
+
+### glibc is much faster than custom
+
+The glibc allocator has been optimized over many years and uses advanced techniques such as:
+
+1. **Thread caching** to reduce contention.
+2. **Segregated free lists and binning strategies** for different allocation sizes.
+3. **Lazy coalescing and adaptive heuristics** to minimize overhead.
+
+These techniques allow glibc’s allocator to achieve very high throughput compared to simple first‑fit strategies in custom implementation.
+
+### What This Benchmark Shows
+
+- **Execution time** is the most meaningful metric here given the speed differences.  
+- When glibc outperforms custom allocation by orders of magnitude on short microbenchmarks, **absolute time is clearer than meaningless “speedup ratios near zero.”**  
+
+---
 
 
 # References / Literature
@@ -172,3 +245,5 @@ advanced features found in production allocators such as:
 3. Wilson, P. R., et al. "Dynamic Storage Allocation: A Survey and Critical Review." *Proc. of the Intl. Workshop on Memory Management*, 1995.
 4. Berger, E. D., McKinley, K. S., et al. "Hoard: A Scalable Memory Allocator for Multithreaded Applications." *ASPLOS VIII*, 2000.
 5. GNU C Library Manual: Memory Allocation. [https://www.gnu.org/software/libc/manual/html_node/](https://www.gnu.org/software/libc/manual/html_node/)
+6. glibc Malloc Internals. [https://sourceware.org/glibc/wiki/MallocInternals](https://sourceware.org/glibc/wiki/MallocInternals)
+7. GNU C Library documentation. [https://www.gnu.org/software/libc/manual/](https://www.gnu.org/software/libc/manual/)
