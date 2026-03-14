@@ -42,13 +42,12 @@ The repository contains:
 
 ```
 .
-├── allocator.cpp      # implementation of malloc/free
-│
-├── benchmark/
-│   └── test_basic_func.py      # benchmark comparing allocators
-│
-├── Makefile               # build instructions
-└── README.md              # project documentation
+├── src/                 # Source code for the allocator
+├── tests/               # Test implementations and benchmarks
+├── images/              # Plots and visualizations
+├── Makefile             # Build automation
+├── README.md            # Project overview
+├── DESIGN_AND_BENCHMARK.md  # Design details and benchmarking results
 ```
 
 ---
