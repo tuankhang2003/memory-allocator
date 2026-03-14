@@ -3,7 +3,7 @@ CFLAGS ?= -g -Wall -O2 -fno-builtin-malloc
 CXX ?= c++
 CXXFLAGS ?= -g -Wall -O2 -fno-builtin-malloc
 
-SRC = allocator.cpp
+SRC = src/allocator.cpp
 
 all: libmymalloc.so
 
