@@ -29,7 +29,6 @@ struct List
     pthread_mutex_t lock;
     Block *head;
     Block *end;
-    pthread_t threadID;
 };
 
 /** Global Arena List */
@@ -117,7 +116,6 @@ static inline void assign_arena_for_thread()
     // Compute index for arena
     int idx = arena_counter.fetch_add(1, std::memory_order_relaxed) % NUM_ARENA;
     local_arena = &arenas[idx];
-    local_arena->threadID = pthread_self();
     local_idx = idx;
     // fprintf(stderr, "Thread %lu has index %d\n", (unsigned long)pthread_self(), local_idx);
 
