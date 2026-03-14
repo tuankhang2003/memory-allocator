@@ -39,103 +39,98 @@ __thread List *local_arena = NULL;
 /** local index of global arenas for thread */
 __thread int local_idx = 0;
 
+/** Counter for arena */
 static std::atomic<int> arena_counter{0};
 static pthread_mutex_t global_brk_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_once_t once = PTHREAD_ONCE_INIT;
 
-/** get size of 1 block */
-static inline size_t block_get_size(Block *b)
-{
-    return b->size_and_flags & ~(size_t)1;
-}
 
-/** return if block is free  */
-static inline int block_is_free(Block *b, List *arena)
-{
-    if (!b)
-        return 0;
-    return (b->size_and_flags & (size_t)1) != 0;
-}
 
-/** set size, flag for block */
-static inline void block_set_size_and_free(Block *b, size_t size, bool is_free)
-{
-    b->size_and_flags = size | (is_free ? 1 : 0);
-}
+static void *mmap_alloc(size_t size);
+static void mmap_free(void *payload);
+static Block *request_more_space(size_t size, List *a);
+static Block *find_fit(size_t size, List *arena);
+static void split_block(Block *block, size_t needed, List *a);
+static void merge_block_with_next(Block *block, List *a);
+void *malloc_from_arena(size_t size);
+static inline size_t block_get_size(Block *b);
+static inline int block_is_free(Block *b, List *arena);
+static inline void block_set_size_and_free(Block *b, size_t size, bool is_free);
+static inline void mark_allocated(Block *block);
+static bool can_merge_with_next(Block *block, List *a);
+static Block *get_block(void *payload);
+static void init_arena_once();
+static inline void assign_arena_for_thread();
+static inline size_t total_block_size_of_payload(size_t payload_size);
 
-/** mark allocated flag for block */
-static inline void mark_allocated(Block *block)
-{
-    block_set_size_and_free(block, block_get_size(block), false);
-}
 
-/** check if block can merge with next block */
-static bool can_merge_with_next(Block *block, List *a)
-{
-    Block *next = block->next;
-    if (next == nullptr)
-        return false;
-    return block_is_free(next, a);
-}
-
-/** Get Block from payload */
-static Block *get_block(void *payload)
-{
-    return (Block *)((char *)payload - sizeof(Block));
-}
-
-/** create global arenas list, only created once */
-static void init_arena_once()
-{
-    arenas = (List *)mmap(nullptr,
-                          sizeof(List) * NUM_ARENA,
-                          PROT_READ | PROT_WRITE,
-                          MAP_PRIVATE | MAP_ANONYMOUS,
-                          -1, 0);
-    if (arenas == MAP_FAILED)
-    {
-        return;
-    }
-    memset(arenas, 0, sizeof(List));
-    // Initialize each List
-    for (int i = 0; i < NUM_ARENA; i++)
-    {
-        pthread_mutex_init(&arenas[i].lock, nullptr);
-        arenas[i].head = nullptr;
-        arenas[i].end = nullptr;
-    }
-}
-
-/** assign local arena for thread */
-static inline void assign_arena_for_thread()
-{
-    if (local_arena)
-    {
-        return;
-    }
-    // Compute index for arena
-    int idx = arena_counter.fetch_add(1, std::memory_order_relaxed) % NUM_ARENA;
-    local_arena = &arenas[idx];
-    local_idx = idx;
-    // fprintf(stderr, "Thread %lu has index %d\n", (unsigned long)pthread_self(), local_idx);
-
-    // fprintf(stderr, "Thread ID: %lu with index %d\n", (unsigned long)pthread_self(), idx);
-}
-
-/** Comnpute size of block + payload with alignment */
-static inline size_t total_block_size_of_payload(size_t payload_size)
-{
-    size_t header_size = sizeof(Block);
-    size_t total = header_size + ALIGN_UP(payload_size, ALIGNMENT);
-    if (total < MIN_BLOCK_SIZE)
-        total = MIN_BLOCK_SIZE;
-    size_t result = ALIGN_UP(total, ALIGNMENT);
-    return result;
-}
 
 /**
  * IMPLEMENTATION
  */
+
+extern "C"
+{
+    void *malloc(size_t size)
+    {
+        if (size == 0)
+            size = 1;
+        if (size > MAX_REQUEST_IN_MEMORY)
+            return mmap_alloc(size);
+        pthread_once(&once, init_arena_once);
+        if (local_arena == nullptr)
+        {
+            assign_arena_for_thread();
+        }
+        return malloc_from_arena(size);
+    }
+
+    void free(void *ptr)
+    {
+        if (ptr == nullptr || local_arena == nullptr)
+        {
+            return;
+        }
+        pthread_mutex_lock(&local_arena->lock);
+
+        Block *block = get_block(ptr);
+        size_t block_size = block_get_size(block);
+
+        if (block_size >= MAX_REQUEST_IN_MEMORY)
+        {
+            pthread_mutex_unlock(&local_arena->lock);
+            mmap_free(ptr);
+            return;
+        }
+
+        block_set_size_and_free(block, block_size, true);
+
+        while (block && can_merge_with_next(block, local_arena))
+        {
+            merge_block_with_next(block, local_arena);
+        }
+        if (!block->next)
+        {
+            local_arena->end = block;
+        }
+
+        Block *prev = block->prev;
+        while (prev && block_is_free(prev, local_arena) && can_merge_with_next(prev, local_arena))
+        {
+            merge_block_with_next(prev, local_arena);
+            block = block->prev;
+        }
+        if (!block->prev)
+        {
+            local_arena->head = block;
+        }
+
+        pthread_mutex_unlock(&local_arena->lock);
+    }
+}
+
+
+
 
 /** malloc using mmap for large malloc size request */
 static void *mmap_alloc(size_t size)
@@ -319,62 +314,93 @@ void *malloc_from_arena(size_t size)
     return (void *)((char *)block + sizeof(Block));
 }
 
-extern "C"
+
+/** get size of 1 block */
+static inline size_t block_get_size(Block *b)
 {
-    void *malloc(size_t size)
+    return b->size_and_flags & ~(size_t)1;
+}
+
+/** return if block is free  */
+static inline int block_is_free(Block *b, List *arena)
+{
+    if (!b)
+        return 0;
+    return (b->size_and_flags & (size_t)1) != 0;
+}
+
+/** set size, flag for block */
+static inline void block_set_size_and_free(Block *b, size_t size, bool is_free)
+{
+    b->size_and_flags = size | (is_free ? 1 : 0);
+}
+
+/** mark allocated flag for block */
+static inline void mark_allocated(Block *block)
+{
+    block_set_size_and_free(block, block_get_size(block), false);
+}
+
+/** check if block can merge with next block */
+static bool can_merge_with_next(Block *block, List *a)
+{
+    Block *next = block->next;
+    if (next == nullptr)
+        return false;
+    return block_is_free(next, a);
+}
+
+/** Get Block from payload */
+static Block *get_block(void *payload)
+{
+    return (Block *)((char *)payload - sizeof(Block));
+}
+
+/** create global arenas list, only created once */
+static void init_arena_once()
+{
+    arenas = (List *)mmap(nullptr,
+                          sizeof(List) * NUM_ARENA,
+                          PROT_READ | PROT_WRITE,
+                          MAP_PRIVATE | MAP_ANONYMOUS,
+                          -1, 0);
+    if (arenas == MAP_FAILED)
     {
-        if (size == 0)
-            size = 1;
-        if (size > MAX_REQUEST_IN_MEMORY)
-            return mmap_alloc(size);
-        pthread_once(&once, init_arena_once);
-        if (local_arena == nullptr)
-        {
-            assign_arena_for_thread();
-        }
-        return malloc_from_arena(size);
+        return;
     }
-
-    void free(void *ptr)
+    memset(arenas, 0, sizeof(List));
+    // Initialize each List
+    for (int i = 0; i < NUM_ARENA; i++)
     {
-        if (ptr == nullptr || local_arena == nullptr)
-        {
-            return;
-        }
-        pthread_mutex_lock(&local_arena->lock);
-
-        Block *block = get_block(ptr);
-        size_t block_size = block_get_size(block);
-
-        if (block_size >= MAX_REQUEST_IN_MEMORY)
-        {
-            pthread_mutex_unlock(&local_arena->lock);
-            mmap_free(ptr);
-            return;
-        }
-
-        block_set_size_and_free(block, block_size, true);
-
-        while (block && can_merge_with_next(block, local_arena))
-        {
-            merge_block_with_next(block, local_arena);
-        }
-        if (!block->next)
-        {
-            local_arena->end = block;
-        }
-
-        Block *prev = block->prev;
-        while (prev && block_is_free(prev, local_arena) && can_merge_with_next(prev, local_arena))
-        {
-            merge_block_with_next(prev, local_arena);
-            block = block->prev;
-        }
-        if (!block->prev)
-        {
-            local_arena->head = block;
-        }
-
-        pthread_mutex_unlock(&local_arena->lock);
+        pthread_mutex_init(&arenas[i].lock, nullptr);
+        arenas[i].head = nullptr;
+        arenas[i].end = nullptr;
     }
+}
+
+/** assign local arena for thread */
+static inline void assign_arena_for_thread()
+{
+    if (local_arena)
+    {
+        return;
+    }
+    // Compute index for arena
+    int idx = arena_counter.fetch_add(1, std::memory_order_relaxed) % NUM_ARENA;
+    local_arena = &arenas[idx];
+    local_idx = idx;
+    // fprintf(stderr, "Thread %lu has index %d\n", (unsigned long)pthread_self(), local_idx);
+
+    // fprintf(stderr, "Thread ID: %lu with index %d\n", (unsigned long)pthread_self(), idx);
+}
+
+/** Comnpute size of block + payload with alignment */
+static inline size_t total_block_size_of_payload(size_t payload_size)
+{
+    size_t header_size = sizeof(Block);
+    size_t total = header_size + ALIGN_UP(payload_size, ALIGNMENT);
+    if (total < MIN_BLOCK_SIZE)
+        total = MIN_BLOCK_SIZE;
+    size_t result = ALIGN_UP(total, ALIGNMENT);
+    return result;
 }
