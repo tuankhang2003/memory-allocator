@@ -1,5 +1,3 @@
-import os
-import subprocess
 from helper_function import *
 
 # Test basic function

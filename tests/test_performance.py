@@ -1,7 +1,6 @@
 
 from helper_function import *
 
-
 def main():
     plot_img = False
     print_green("+++++ Benchmark for simple allocation test ++++++")
