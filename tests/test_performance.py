@@ -5,7 +5,7 @@ from helper_function import *
 # benchmark executable
 THREAD_TEST = "./test_simple_performance"
 
-COALESCE_TEST = "./test_coalesce_performance"
+COALESCE_TEST = "./test_coalesce"
 # number of threads 
 THREADS = [1, 2, 4]
 
@@ -14,7 +14,7 @@ def run_benchmark(program,  num_threads, ld_preload=None):
     if ld_preload:
         env["LD_PRELOAD"] = ld_preload
 
-    # run benchmark with -t option
+    # run benchmark with -t (thread) option
     result = subprocess.run(
         [program, "-t", str(num_threads)],
         stdout=subprocess.PIPE,
@@ -46,7 +46,7 @@ def run_and_print_statistic(program):
         glibc_times[t] = time_taken
         print(f"{t} threads: {time_taken:.6f} s")
 
-    print_green("\n=== Speedup vs glibc ===")
+    print_green("\n=== Speedup vs glibc ===")    
     for t in THREADS:
         speedup = glibc_times[t] / my_times[t]
         print(f"{t} threads: {speedup:.2f}x")
@@ -55,3 +55,5 @@ def run_and_print_statistic(program):
 if __name__ == "__main__":
     print_green("+++++ Benchmark for testThread ++++++")
     run_and_print_statistic(THREAD_TEST)
+    print_green("+++++ Benchmark for coalesce ++++++")
+    run_and_print_statistic(COALESCE_TEST)

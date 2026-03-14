@@ -5,7 +5,7 @@ from helper_function import *
 # Test basic function
 
 def main():
-    tests = ["alloc_free_test"]
+    tests = ["test_alloc_free", "test_coalesce"]
     env = os.environ.copy()
     env["LD_PRELOAD"] = LIB_MALLOC_PATH
 
